@@ -150,7 +150,7 @@
 
 | Поле | По умолчанию | Смысл |
 |---|---|---|
-| StartMinimized | true | стартовать в трее |
+| MonitoringEnabled | true | включать мониторинг при следующем запуске; переключается в трее |
 | CloseToTray | true | закрытие окна = свернуть |
 | Autostart | false | автозапуск (per-user, HKCU Run) |
 | ConfirmRestart | true | спрашивать перед ручным перезапуском |

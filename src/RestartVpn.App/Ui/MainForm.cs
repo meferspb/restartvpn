@@ -197,6 +197,7 @@ namespace RestartVpn.App.Ui
             if (_controller.IsMonitoring)
             {
                 await _controller.StopMonitoringAsync();
+                _controller.SetMonitoringEnabled(false);
                 AppendLog("Мониторинг остановлен.", LogLevel.Info);
             }
             else

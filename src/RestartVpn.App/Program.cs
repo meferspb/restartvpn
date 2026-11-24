@@ -87,7 +87,7 @@ namespace RestartVpn.App
             if (options.Headless)
                 return RunHeadless(paths, store, load, options);
 
-            return RunGui(paths, store, load, options, portable);
+            return RunGui(paths, store, load, options);
         }
 
         private static int RunSelfTest(AppPaths paths, SettingsLoadResult load)
@@ -195,7 +195,7 @@ namespace RestartVpn.App
             return 0;
         }
 
-        private static int RunGui(AppPaths paths, SettingsStore store, SettingsLoadResult load, CliOptions options, bool portable)
+        private static int RunGui(AppPaths paths, SettingsStore store, SettingsLoadResult load, CliOptions options)
         {
             SingleInstance instance;
             if (!SingleInstance.TryAcquire(InstanceKey(load), out instance))
@@ -203,25 +203,11 @@ namespace RestartVpn.App
 
             using (instance)
             using (var controller = new AppController(paths, store, load, options.DryRun))
+            using (var context = new TrayContext(controller))
             {
-                bool needsFirstRun = !load.Existed || !load.Settings.Targets.Any(t => t.Enabled);
-                if (needsFirstRun)
-                {
-                    using (var form = new FirstRunForm(load.Settings, VpnProfileLocator.DiscoverProfiles()))
-                    {
-                        if (form.ShowDialog() == DialogResult.OK && form.Result != null &&
-                            !controller.ApplySettings(form.Result))
-                        {
-                            MessageBox.Show(controller.LastError, "RestartVPN", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        }
-                    }
-                }
-
-                bool minimized = options.Minimized || controller.Settings.Ui.StartMinimized;
-                using (var context = new TrayContext(controller, minimized))
-                {
-                    Application.Run(context);
-                }
+                // Tray-only: no main window is shown on startup. Settings and the
+                // monitoring on/off switch live in the tray menu.
+                Application.Run(context);
             }
 
             return 0;

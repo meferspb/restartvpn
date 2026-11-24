@@ -19,7 +19,6 @@ namespace RestartVpn.App.Ui
         private RadioButton _monitorOnly;
         private RadioButton _autoRestart;
         private CheckBox _autostart;
-        private CheckBox _startMinimized;
         private CheckBox _closeToTray;
         private CheckBox _confirmRestart;
         private CheckBox _balloon;
@@ -172,13 +171,20 @@ namespace RestartVpn.App.Ui
             AddRow(t, "Режим работы", modePanel);
 
             _autostart = new CheckBox { Text = "Запускать при входе в Windows", AutoSize = true };
-            _startMinimized = new CheckBox { Text = "Запускать свёрнутым в трей", AutoSize = true };
             _closeToTray = new CheckBox { Text = "Закрытие окна сворачивает в трей", AutoSize = true };
             _confirmRestart = new CheckBox { Text = "Спрашивать подтверждение перед ручным перезапуском", AutoSize = true };
             AddRow(t, "Запуск", _autostart);
-            AddRow(t, "", _startMinimized);
             AddRow(t, "", _closeToTray);
             AddRow(t, "", _confirmRestart);
+
+            var trayNote = new Label
+            {
+                Text = "Приложение запускается в трее без окна. Включение и выключение\n" +
+                       "мониторинга — в меню значка (правый клик).",
+                AutoSize = true,
+                ForeColor = Color.FromArgb(100, 100, 100)
+            };
+            AddRow(t, "Трей", trayNote);
 
             _balloon = new CheckBox { Text = "Показывать уведомления в трее", AutoSize = true };
             _sound = new CheckBox { Text = "Звуковой сигнал при событии", AutoSize = true };
@@ -411,7 +417,6 @@ namespace RestartVpn.App.Ui
             _monitorOnly.Checked = !_s.IsAutoRestart;
             _autoRestart.Checked = _s.IsAutoRestart;
             _autostart.Checked = _s.Ui.Autostart;
-            _startMinimized.Checked = _s.Ui.StartMinimized;
             _closeToTray.Checked = _s.Ui.CloseToTray;
             _confirmRestart.Checked = _s.Ui.ConfirmRestart;
             _balloon.Checked = _s.Notifications.Balloon;
@@ -493,7 +498,6 @@ namespace RestartVpn.App.Ui
 
             _s.Mode = _autoRestart.Checked ? "AutoRestart" : "MonitorOnly";
             _s.Ui.Autostart = _autostart.Checked;
-            _s.Ui.StartMinimized = _startMinimized.Checked;
             _s.Ui.CloseToTray = _closeToTray.Checked;
             _s.Ui.ConfirmRestart = _confirmRestart.Checked;
             _s.Notifications.Balloon = _balloon.Checked;

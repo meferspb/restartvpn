@@ -73,6 +73,7 @@ namespace RestartVpn.App
         public bool StartMonitoring()
         {
             if (_settings == null) return false;
+            LastError = string.Empty;
             var errors = Validate().Where(i => i.Severity == IssueSeverity.Error).ToList();
             if (errors.Count > 0)
             {
@@ -83,6 +84,12 @@ namespace RestartVpn.App
             try
             {
                 _service.Start();
+                if (!_settings.Ui.MonitoringEnabled)
+                {
+                    _settings.Ui.MonitoringEnabled = true;
+                    SaveQuiet();
+                }
+                RaiseChanged();
                 return true;
             }
             catch (Exception ex)
@@ -96,6 +103,21 @@ namespace RestartVpn.App
         {
             if (_service != null) await _service.StopAsync().ConfigureAwait(false);
             RaiseChanged();
+        }
+
+        /// <summary>Persists the user's tray choice; does not start/stop the service itself.</summary>
+        public void SetMonitoringEnabled(bool enabled)
+        {
+            if (_settings.Ui.MonitoringEnabled == enabled) return;
+            _settings.Ui.MonitoringEnabled = enabled;
+            SaveQuiet();
+            RaiseChanged();
+        }
+
+        private void SaveQuiet()
+        {
+            try { _store.Save(_settings); }
+            catch (Exception ex) { LastError = "Cannot save settings: " + ex.Message; }
         }
 
         public bool ApplySettings(AppSettings settings)
@@ -126,7 +148,7 @@ namespace RestartVpn.App
             catch { }
 
             // Saving settings must not start a monitor the user had stopped.
-            if (wasRunning && !StartMonitoring()) return false;
+            if (wasRunning && settings.Ui.MonitoringEnabled && !StartMonitoring()) return false;
             RaiseChanged();
             return true;
         }

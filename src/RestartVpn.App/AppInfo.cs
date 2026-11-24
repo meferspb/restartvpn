@@ -21,7 +21,7 @@ namespace RestartVpn.App
                         return attr.InformationalVersion;
                     return asm.GetName().Version.ToString(3);
                 }
-                catch { return "0.1.0"; }
+                catch { return "0.1.1"; }
             }
         }
     }

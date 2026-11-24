@@ -179,7 +179,7 @@ namespace RestartVpn.Core.Settings
         public bool FollowRedirects { get; set; } = true;
         public int MaxRedirects { get; set; } = 5;
         public bool Tls12 { get; set; } = true;
-        public string UserAgent { get; set; } = "RestartVPN/0.1 (+https://github.com/meferspb/restartvpn)";
+        public string UserAgent { get; set; } = "RestartVPN/0.1.1 (+https://github.com/meferspb/restartvpn)";
         public bool Treat5xxAsFailure { get; set; } = true;
         public int MaxBodyBytes { get; set; } = 65536;
 
@@ -216,7 +216,9 @@ namespace RestartVpn.Core.Settings
 
     public sealed class UiSettings
     {
-        public bool StartMinimized { get; set; } = true;
+        /// <summary>Desired monitoring state on the next launch; toggled from the tray menu.</summary>
+        public bool MonitoringEnabled { get; set; } = true;
+
         public bool CloseToTray { get; set; } = true;
         public bool Autostart { get; set; } = false;
         public bool ConfirmRestart { get; set; } = true;
