@@ -9,7 +9,7 @@
 ~~~powershell
 git remote add origin https://github.com/meferspb/restartvpn.git
 git push -u origin main
-git push origin v0.1.1
+git push origin v0.1.2
 ~~~
 
 Если репозитория ещё нет и установлен GitHub CLI:

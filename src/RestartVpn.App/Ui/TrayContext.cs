@@ -1,28 +1,34 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
+using System.Linq;
+using System.Text;
 using System.Windows.Forms;
 using RestartVpn.Core.Diagnostics;
 using RestartVpn.Core.Runtime;
+using RestartVpn.Core.Vpn;
 
 namespace RestartVpn.App.Ui
 {
     /// <summary>
     /// Tray-only shell: no main window is shown on startup. The tray menu exposes the
-    /// monitoring on/off switch, settings and the optional status window.
+    /// monitoring on/off switch, status, quick actions and settings.
     /// </summary>
     public sealed class TrayContext : ApplicationContext
     {
         private readonly AppController _controller;
         private readonly MainForm _form;
         private readonly NotifyIcon _tray;
+        private ToolStripMenuItem _statusItem;
         private ToolStripMenuItem _monitoringItem;
         private ToolStripMenuItem _checkItem;
         private ToolStripMenuItem _restartItem;
-        private ToolStripMenuItem _snoozeItem;
+        private ToolStripMenuItem _pauseItem;
         private ToolStripMenuItem _resumeItem;
         private bool _exitRequested;
+        private bool _needsSetup;
 
-        public TrayContext(AppController controller)
+        public TrayContext(AppController controller, bool showWindow = false)
         {
             _controller = controller;
             _form = new MainForm(controller);
@@ -37,7 +43,7 @@ namespace RestartVpn.App.Ui
                 ContextMenuStrip = BuildMenu()
             };
             _tray.MouseClick += OnTrayMouseClick;
-            _tray.BalloonTipClicked += (s, e) => ShowMenu();
+            _tray.BalloonTipClicked += OnBalloonClick;
 
             controller.EventRaised += OnEvent;
             controller.Changed += OnControllerChanged;
@@ -46,12 +52,15 @@ namespace RestartVpn.App.Ui
             {
                 if (!controller.StartMonitoring())
                 {
+                    _needsSetup = !controller.Settings.Targets.Any(t => t.Enabled);
                     ShowBalloon("Мониторинг не запущен: " + controller.LastError +
-                                "\nОткройте «Настройки» в меню значка.", ToolTipIcon.Warning);
+                                (_needsSetup ? "\nНажмите на это уведомление, чтобы открыть настройки." : ""),
+                        ToolTipIcon.Warning);
                 }
             }
 
             UpdateTrayState();
+            if (showWindow) ShowWindow();
         }
 
         private Icon LoadTrayIcon()
@@ -71,13 +80,20 @@ namespace RestartVpn.App.Ui
             menu.Items.Add("Показать окно", null, (s, e) => ShowWindow());
             menu.Items.Add(new ToolStripSeparator());
 
+            _statusItem = new ToolStripMenuItem("RestartVPN") { Enabled = false };
+            menu.Items.Add(_statusItem);
+
             _monitoringItem = new ToolStripMenuItem("Включить мониторинг");
             _monitoringItem.Click += async (s, e) => await ToggleMonitoringAsync();
             menu.Items.Add(_monitoringItem);
 
             _checkItem = new ToolStripMenuItem("Проверить сейчас", null, async (s, e) =>
             {
-                try { await _controller.CheckNowAsync(); }
+                try
+                {
+                    await _controller.CheckNowAsync();
+                    ShowBalloon(BuildShortStatus(_controller.Snapshot), ToolTipIcon.Info);
+                }
                 catch (Exception ex) { ShowBalloon(ex.Message, ToolTipIcon.Error); }
             });
             menu.Items.Add(_checkItem);
@@ -94,23 +110,26 @@ namespace RestartVpn.App.Ui
             menu.Items.Add(_restartItem);
 
             menu.Items.Add(new ToolStripSeparator());
-            _snoozeItem = new ToolStripMenuItem("Пауза 30 минут", null, (s, e) => _controller.Snooze(TimeSpan.FromMinutes(30)));
-            menu.Items.Add(_snoozeItem);
+            _pauseItem = new ToolStripMenuItem("Пауза");
+            foreach (int minutes in new[] { 15, 30, 60, 120 })
+            {
+                int m = minutes;
+                _pauseItem.DropDownItems.Add("На " + m + " мин", null, (s, e) =>
+                {
+                    _controller.Snooze(TimeSpan.FromMinutes(m));
+                    ShowBalloon("Мониторинг на паузе " + m + " мин.", ToolTipIcon.Info);
+                });
+            }
+            menu.Items.Add(_pauseItem);
+
             _resumeItem = new ToolStripMenuItem("Возобновить", null, (s, e) => _controller.Resume());
             menu.Items.Add(_resumeItem);
 
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Настройки", null, (s, e) =>
-            {
-                using (var form = new SettingsForm(_controller.Settings.Clone(), _controller.Paths))
-                {
-                    if (form.ShowDialog(_form) == DialogResult.OK)
-                    {
-                        if (!_controller.ApplySettings(form.Result))
-                            ShowBalloon(_controller.LastError, ToolTipIcon.Warning);
-                    }
-                }
-            });
+            menu.Items.Add("Настройки", null, (s, e) => OpenSettings());
+            menu.Items.Add("Открыть журнал", null, (s, e) => OpenLogs());
+            menu.Items.Add("Копировать диагностику", null, (s, e) => CopyDiagnostics());
+            menu.Items.Add("О программе", null, (s, e) => ShowAbout());
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Выход", null, (s, e) => ExitApplication());
 
@@ -126,13 +145,19 @@ namespace RestartVpn.App.Ui
                 {
                     await _controller.StopMonitoringAsync();
                     _controller.SetMonitoringEnabled(false);
+                    ShowBalloon("Мониторинг выключен.", ToolTipIcon.Info);
                 }
                 else
                 {
                     if (!_controller.StartMonitoring())
                     {
+                        _needsSetup = !_controller.Settings.Targets.Any(t => t.Enabled);
                         ShowBalloon("Мониторинг не запущен: " + _controller.LastError +
                                     "\nПроверьте настройки профиля и сайтов.", ToolTipIcon.Warning);
+                    }
+                    else
+                    {
+                        ShowBalloon("Мониторинг включён.", ToolTipIcon.Info);
                     }
                 }
             }
@@ -147,6 +172,25 @@ namespace RestartVpn.App.Ui
         private void OnTrayMouseClick(object sender, MouseEventArgs e)
         {
             if (e.Button == MouseButtons.Left) ShowMenu();
+        }
+
+        private void OnBalloonClick(object sender, EventArgs e)
+        {
+            if (_needsSetup)
+            {
+                _needsSetup = false;
+                OpenSettings();
+            }
+            else
+            {
+                ShowMenu();
+            }
+        }
+
+        public void RequestActivate()
+        {
+            if (_exitRequested || _form.IsDisposed || !_form.IsHandleCreated) return;
+            try { _form.BeginInvoke(new Action(ShowMenu)); } catch { }
         }
 
         private void ShowMenu()
@@ -165,16 +209,111 @@ namespace RestartVpn.App.Ui
             _form.BringToFront();
         }
 
+        private void OpenSettings()
+        {
+            using (var form = new SettingsForm(_controller.Settings.Clone(), _controller.Paths))
+            {
+                if (form.ShowDialog(_form) != DialogResult.OK) return;
+                if (!_controller.ApplySettings(form.Result))
+                    ShowBalloon(_controller.LastError, ToolTipIcon.Warning);
+            }
+            UpdateTrayState();
+        }
+
+        private void OpenLogs()
+        {
+            try
+            {
+                string dir = _controller.Settings.Logging.Directory;
+                if (string.IsNullOrWhiteSpace(dir)) dir = _controller.Paths.LogDir;
+                Process.Start("explorer.exe", "\"" + dir + "\"");
+            }
+            catch (Exception ex) { ShowBalloon(ex.Message, ToolTipIcon.Warning); }
+        }
+
+        private void CopyDiagnostics()
+        {
+            try
+            {
+                var snapshot = _controller.Snapshot;
+                var sb = new StringBuilder();
+                sb.AppendLine("RestartVPN " + AppInfo.Version);
+                sb.AppendLine("settings: " + _controller.Paths.SettingsPath);
+                sb.AppendLine("profile: " + _controller.Settings.Vpn.ProfileName);
+                sb.AppendLine("monitoring: " + (_controller.IsMonitoring ? "on" : "off") +
+                              " (enabled flag: " + _controller.Settings.Ui.MonitoringEnabled + ")");
+                sb.AppendLine("vpn: " + snapshot.Vpn.State + " — " + snapshot.Vpn.Detail);
+                foreach (var t in snapshot.Targets)
+                    sb.AppendLine("target " + t.Name + ": " + (t.HasResult ? (t.Success ? "OK " : "FAIL ") + t.Detail : "not probed") +
+                                  " (" + t.ConsecutiveFailures + " fails)");
+                sb.AppendLine("logs: " + (string.IsNullOrWhiteSpace(_controller.Settings.Logging.Directory)
+                    ? _controller.Paths.LogDir : _controller.Settings.Logging.Directory));
+                Clipboard.SetText(sb.ToString());
+                ShowBalloon("Диагностика скопирована в буфер обмена.", ToolTipIcon.Info);
+            }
+            catch (Exception ex) { ShowBalloon(ex.Message, ToolTipIcon.Warning); }
+        }
+
+        private void ShowAbout()
+        {
+            MessageBox.Show(
+                "RestartVPN " + AppInfo.Version + "\n\n" +
+                "Монитор доступности сайтов с перезапуском одного профиля OpenVPN.\n" +
+                "Лицензия MIT. Репозиторий: " + AppInfo.RepositoryUrl + "\n\n" +
+                "Настройки и журналы: " + _controller.Paths.DataDir,
+                "О программе", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
         private void UpdateTrayState()
         {
-            bool on = _controller.IsMonitoring;
-            string text = on ? "RestartVPN — мониторинг включён" : "RestartVPN — мониторинг выключен";
             var snapshot = _controller.Snapshot;
-            if (snapshot.SnoozedUntil.HasValue && snapshot.SnoozedUntil.Value > DateTimeOffset.Now)
-                text += " (пауза)";
+            string text = BuildStatusText(snapshot);
             if (text.Length > 63) text = text.Substring(0, 63);
             _tray.Text = text;
+            if (_statusItem != null) _statusItem.Text = text;
             UpdateMenuState();
+        }
+
+        private string BuildStatusText(MonitorSnapshot snapshot)
+        {
+            bool on = _controller.IsMonitoring;
+            string state = on ? "мониторинг включён" : "мониторинг выключен";
+            string sites = BuildShortStatus(snapshot);
+            string vpn = VpnText(snapshot.Vpn);
+            string text = "RestartVPN — " + state + " · " + sites;
+            if (vpn.Length > 0) text += " · VPN: " + vpn;
+            if (snapshot.SnoozedUntil.HasValue && snapshot.SnoozedUntil.Value > DateTimeOffset.Now)
+                text += " (пауза)";
+            return text;
+        }
+
+        private static string BuildShortStatus(MonitorSnapshot snapshot)
+        {
+            int enabled = 0, ok = 0, down = 0;
+            foreach (var t in snapshot.Targets)
+            {
+                if (!t.Enabled) continue;
+                enabled++;
+                if (t.HasResult && t.Success) ok++;
+                else if (t.HasResult) down++;
+            }
+            if (enabled == 0) return "нет целей";
+            string text = ok + "/" + enabled + " OK";
+            if (down > 0) text += ", " + down + " недоступно";
+            return text;
+        }
+
+        private static string VpnText(VpnStatus vpn)
+        {
+            if (vpn == null) return string.Empty;
+            switch (vpn.State)
+            {
+                case VpnState.Connected: return "подключён";
+                case VpnState.Connecting: return "подключается";
+                case VpnState.Disconnected: return "отключён";
+                case VpnState.Error: return "ошибка";
+                default: return string.Empty;
+            }
         }
 
         private void UpdateMenuState()
@@ -185,7 +324,7 @@ namespace RestartVpn.App.Ui
             _monitoringItem.Checked = on;
             _checkItem.Enabled = on;
             _restartItem.Enabled = on;
-            _snoozeItem.Enabled = on;
+            _pauseItem.Enabled = on;
             var snapshot = _controller.Snapshot;
             _resumeItem.Enabled = on && snapshot.SnoozedUntil.HasValue && snapshot.SnoozedUntil.Value > DateTimeOffset.Now;
         }
@@ -193,15 +332,13 @@ namespace RestartVpn.App.Ui
         private void OnControllerChanged()
         {
             if (_exitRequested || _form.IsDisposed || !_form.IsHandleCreated) return;
-            try { _form.BeginInvoke(new Action(UpdateTrayState)); }
-            catch { }
+            try { _form.BeginInvoke(new Action(UpdateTrayState)); } catch { }
         }
 
         private void OnEvent(MonitorEvent ev)
         {
             if (_exitRequested || _tray == null || _form.IsDisposed || !_form.IsHandleCreated) return;
-            try { _form.BeginInvoke(new Action<MonitorEvent>(ShowEventNotification), ev); }
-            catch { }
+            try { _form.BeginInvoke(new Action<MonitorEvent>(ShowEventNotification), ev); } catch { }
         }
 
         private void ShowEventNotification(MonitorEvent ev)

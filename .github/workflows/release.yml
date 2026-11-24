@@ -8,25 +8,55 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '8.0.x'
 
+      - name: Resolve version from tag
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+)$') {
+            throw "Release tag must look like v1.2.3, got '$tag'"
+          }
+          "VERSION=$($Matches[1])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Build, test and package
         shell: pwsh
-        run: ./scripts/build.ps1 -Dotnet dotnet
+        run: ./scripts/build.ps1 -Dotnet dotnet -Version $env:VERSION
+
+      - name: Prepare release notes
+        shell: pwsh
+        run: |
+          $v = $env:VERSION
+          $hash = (Get-Content "dist/RestartVPN-$v.exe.sha256" -Raw).Split(' ')[0].Trim()
+          $notes = @(
+            "## RestartVPN $v",
+            "",
+            "Установка: скачайте RestartVPN-$v.exe и запустите. Приложение работает в трее;",
+            "настройки и включение мониторинга — в меню значка.",
+            "",
+            "SHA-256: $hash",
+            "",
+            "Репозиторий не содержит настроек и ключей. Изменения: см. CHANGELOG.md."
+          )
+          Set-Content -Path "dist/RELEASE_NOTES.md" -Value $notes -Encoding utf8
 
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/RestartVPN-*.exe
-            dist/RestartVPN-*.sha256
-            LICENSE
-            README.md
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = $env:VERSION
+          gh release create $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY "dist/RestartVPN-$v.exe" "dist/RestartVPN-$v.exe.sha256" --title "RestartVPN $v" --notes-file "dist/RELEASE_NOTES.md" --latest

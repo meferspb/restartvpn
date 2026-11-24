@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using RestartVpn.App.Cli;
 using RestartVpn.App.Install;
@@ -47,6 +49,9 @@ namespace RestartVpn.App
 
             if (options.SelfTest || options.Once)
                 return RunSelfTest(paths, load);
+
+            if (options.Status)
+                return RunStatus(paths, load);
 
             if (options.Uninstall)
                 return RunUninstall(paths, store, load, options);
@@ -99,6 +104,43 @@ namespace RestartVpn.App
             if (ConsoleHost.HasConsole) Console.Write(text);
             else MessageBox.Show(text, "RestartVPN — self-test", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return code;
+        }
+
+        private static int RunStatus(AppPaths paths, SettingsLoadResult load)
+        {
+            var s = load.Settings;
+            var payload = new Dictionary<string, object>
+            {
+                ["version"] = AppInfo.Version,
+                ["settingsPath"] = paths.SettingsPath,
+                ["settingsExist"] = load.Existed,
+                ["mode"] = s.Mode,
+                ["monitoringEnabled"] = s.Ui.MonitoringEnabled,
+                ["profile"] = s.Vpn.ProfileName,
+                ["profilePath"] = string.Empty,
+                ["vpnState"] = "Unknown",
+                ["vpnDetail"] = string.Empty,
+                ["issues"] = load.Issues.Select(i => new { severity = i.Severity.ToString(), path = i.Path, message = i.Message }).ToList(),
+                ["targets"] = s.Targets.Select(t => new { name = t.Name, url = t.Url, enabled = t.Enabled }).ToList()
+            };
+
+            try
+            {
+                var backend = new OpenVpnGuiBackend(s.Vpn, null);
+                var vpn = backend.GetStatus();
+                payload["profilePath"] = backend.ProfilePath ?? string.Empty;
+                payload["vpnState"] = vpn.State.ToString();
+                payload["vpnDetail"] = vpn.Detail ?? string.Empty;
+            }
+            catch (Exception ex)
+            {
+                payload["vpnDetail"] = "status error: " + ex.Message;
+            }
+
+            string json = new JavaScriptSerializer().Serialize(payload);
+            if (ConsoleHost.Ensure(true)) Console.WriteLine(json);
+            else MessageBox.Show(json, "RestartVPN status", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return load.HasErrors ? 1 : 0;
         }
 
         private static int RunInstall(AppPaths paths, CliOptions options)
@@ -203,11 +245,14 @@ namespace RestartVpn.App
 
             using (instance)
             using (var controller = new AppController(paths, store, load, options.DryRun))
-            using (var context = new TrayContext(controller))
+            using (var context = new TrayContext(controller, options.Show))
             {
-                // Tray-only: no main window is shown on startup. Settings and the
-                // monitoring on/off switch live in the tray menu.
-                Application.Run(context);
+                // Tray-only by default: no main window is shown on startup. Settings and
+                // the monitoring on/off switch live in the tray menu. A second launch
+                // activates the already running instance instead of exiting silently.
+                instance.ShowRequested += context.RequestActivate;
+                try { Application.Run(context); }
+                finally { instance.ShowRequested -= context.RequestActivate; }
             }
 
             return 0;

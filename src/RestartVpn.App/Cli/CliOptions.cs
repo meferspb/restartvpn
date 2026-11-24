@@ -17,6 +17,8 @@ namespace RestartVpn.App.Cli
         public bool UninstallRun { get; private set; }
         public bool Portable { get; private set; }
         public bool Minimized { get; private set; }
+        public bool Show { get; private set; }
+        public bool Status { get; private set; }
         public bool DryRun { get; private set; }
         public bool NoInstallPrompt { get; private set; }
         public string ConfigPath { get; private set; }
@@ -46,7 +48,9 @@ namespace RestartVpn.App.Cli
                         if (i + 1 < args.Length) { o.UninstallDirectory = args[++i]; }
                         break;
                     case "--portable": o.Portable = true; break;
-                    case "--minimized": o.Minimized = true; break;
+                    case "--minimized": o.Minimized = true; break; // legacy autostart entries; tray is the default
+                    case "--show": o.Show = true; break;
+                    case "--status": o.Status = true; break;
                     case "--dry-run": o.DryRun = true; break;
                     case "--no-install-prompt": o.NoInstallPrompt = true; break;
                     case "--config":
@@ -72,8 +76,9 @@ namespace RestartVpn.App.Cli
                 sb.AppendLine("RestartVPN " + AppInfo.Version);
                 sb.AppendLine();
                 sb.AppendLine("Usage:");
-                sb.AppendLine("  RestartVPN.exe                 start the tray application");
-                sb.AppendLine("  RestartVPN.exe --minimized     start hidden in the tray");
+                sb.AppendLine("  RestartVPN.exe                 start in the tray (no window)");
+                sb.AppendLine("  RestartVPN.exe --show          start and open the status window");
+                sb.AppendLine("  RestartVPN.exe --status        print JSON status and exit");
                 sb.AppendLine("  RestartVPN.exe --headless      run the monitor in this console");
                 sb.AppendLine("  RestartVPN.exe --selftest      read-only check of settings, VPN state and targets");
                 sb.AppendLine("  RestartVPN.exe --once          one probe cycle, no VPN actions");

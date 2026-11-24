@@ -2,6 +2,7 @@
 param(
     [string]$Configuration = 'Release',
     [string]$Dotnet = 'dotnet',
+    [string]$Version = '',
     [switch]$SkipTests
 )
 
@@ -10,13 +11,26 @@ $root = Split-Path -Parent $PSScriptRoot
 Push-Location $root
 
 try {
-    [xml]$props = Get-Content (Join-Path $root 'Directory.Build.props')
-    $version = @($props.Project.PropertyGroup)[0].Version
-    if (-not $version) { $version = '0.0.0' }
+    if ($Version) {
+        if ($Version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Version must look like 1.2.3, got '$Version'"
+        }
+    } else {
+        [xml]$props = Get-Content (Join-Path $root 'Directory.Build.props')
+        $Version = @($props.Project.PropertyGroup)[0].Version
+        if (-not $Version) { $Version = '0.0.0' }
+    }
 
-    Write-Host "RestartVPN $version ($Configuration)" -ForegroundColor Cyan
+    Write-Host "RestartVPN $Version ($Configuration)" -ForegroundColor Cyan
 
-    & $Dotnet build (Join-Path $root 'RestartVpn.sln') -c $Configuration --nologo
+    $buildArgs = @('build', (Join-Path $root 'RestartVpn.sln'), '-c', $Configuration, '--nologo')
+    if ($PSBoundParameters.ContainsKey('Version') -and $Version) {
+        $buildArgs += "-p:Version=$Version"
+        $buildArgs += "-p:FileVersion=$($Version).0"
+        $buildArgs += "-p:InformationalVersion=$Version"
+    }
+
+    & $Dotnet @buildArgs
     if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
 
     if (-not $SkipTests) {
@@ -36,7 +50,7 @@ try {
 
     $dist = Join-Path $root 'dist'
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
-    $target = Join-Path $dist ("RestartVPN-" + $version + ".exe")
+    $target = Join-Path $dist ("RestartVPN-" + $Version + ".exe")
     Copy-Item $exe $target -Force
 
     $hash = (Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant()

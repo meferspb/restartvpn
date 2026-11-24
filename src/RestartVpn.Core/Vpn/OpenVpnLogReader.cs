@@ -7,10 +7,17 @@ namespace RestartVpn.Core.Vpn
     /// <summary>
     /// Read-only tail of the log file OpenVPN GUI writes for a profile. Gives a much better
     /// tunnel signal than "the process exists", without touching the profile or the tunnel.
+    /// The tail is cached by (path, mtime, length): the monitor polls status every few
+    /// seconds and must not re-read a large file when OpenVPN has written nothing.
     /// </summary>
     public sealed class OpenVpnLogReader
     {
-        private const int TailBytes = 256 * 1024;
+        private const int TailBytes = 128 * 1024;
+        private readonly object _gate = new object();
+        private string _cachePath;
+        private DateTime _cacheWriteUtc;
+        private long _cacheLength = -1;
+        private Evidence _cache;
 
         public sealed class Evidence
         {
@@ -35,40 +42,65 @@ namespace RestartVpn.Core.Vpn
 
         public Evidence Read(string profileName, string configuredDirectory)
         {
-            var result = new Evidence();
-            string path = ResolveLogPath(profileName, configuredDirectory);
-            if (string.IsNullOrEmpty(path)) return result;
+            lock (_gate)
+            {
+                var result = new Evidence();
+                string path = ResolveLogPath(profileName, configuredDirectory);
+                if (string.IsNullOrEmpty(path)) return result;
 
-            string text;
-            try
-            {
-                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                long length;
+                DateTime writeUtc;
+                try
                 {
-                    long start = Math.Max(0, fs.Length - TailBytes);
-                    fs.Seek(start, SeekOrigin.Begin);
-                    using (var reader = new StreamReader(fs, Encoding.UTF8, true))
-                        text = reader.ReadToEnd();
+                    var info = new FileInfo(path);
+                    length = info.Length;
+                    writeUtc = info.LastWriteTimeUtc;
+                    if (_cache != null && string.Equals(_cachePath, path, StringComparison.OrdinalIgnoreCase) &&
+                        _cacheLength == length && _cacheWriteUtc == writeUtc)
+                    {
+                        return _cache;
+                    }
                 }
-                result.LastWriteUtc = File.GetLastWriteTimeUtc(path);
-            }
-            catch
-            {
+                catch
+                {
+                    return result;
+                }
+
+                string text;
+                try
+                {
+                    using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                    {
+                        long start = Math.Max(0, fs.Length - TailBytes);
+                        fs.Seek(start, SeekOrigin.Begin);
+                        using (var reader = new StreamReader(fs, Encoding.UTF8, true))
+                            text = reader.ReadToEnd();
+                    }
+                }
+                catch
+                {
+                    return result;
+                }
+
+                result.LastWriteUtc = writeUtc;
+                string[] lines = text.Replace("\r", string.Empty).Split('\n');
+                foreach (string line in lines)
+                {
+                    var kind = Classify(line);
+                    if (kind == VpnLogEvidence.None) continue;
+
+                    // Later lines win: the tail reflects the current state, not history.
+                    result.Kind = kind;
+                    result.Detail = line.Trim();
+                    if (result.Detail.Length > 300) result.Detail = result.Detail.Substring(0, 300);
+                }
+
+                _cachePath = path;
+                _cacheWriteUtc = writeUtc;
+                _cacheLength = length;
+                _cache = result;
                 return result;
             }
-
-            string[] lines = text.Replace("\r", string.Empty).Split('\n');
-            foreach (string line in lines)
-            {
-                var kind = Classify(line);
-                if (kind == VpnLogEvidence.None) continue;
-
-                // Later lines win: the tail reflects the current state, not history.
-                result.Kind = kind;
-                result.Detail = line.Trim();
-                if (result.Detail.Length > 300) result.Detail = result.Detail.Substring(0, 300);
-            }
-
-            return result;
         }
 
         private static VpnLogEvidence Classify(string line)
