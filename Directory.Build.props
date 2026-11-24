@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>8.0</LangVersion>
+    <Deterministic>true</Deterministic>
+    <Company>RestartVPN contributors</Company>
+    <Product>RestartVPN</Product>
+    <Copyright>Copyright (c) 2026 RestartVPN contributors</Copyright>
+    <Version>0.1.0</Version>
+    <FileVersion>0.1.0.0</FileVersion>
+    <InformationalVersion>0.1.0</InformationalVersion>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+</Project>

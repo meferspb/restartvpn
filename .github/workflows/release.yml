@@ -1,0 +1,32 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build, test and package
+        shell: pwsh
+        run: ./scripts/build.ps1 -Dotnet dotnet
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/RestartVPN-*.exe
+            dist/RestartVPN-*.sha256
+            LICENSE
+            README.md

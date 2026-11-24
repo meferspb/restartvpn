@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build, test and package
+        shell: pwsh
+        run: ./scripts/build.ps1 -Dotnet dotnet
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestartVPN
+          path: |
+            dist/RestartVPN-*.exe
+            dist/RestartVPN-*.sha256
