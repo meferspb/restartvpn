@@ -179,7 +179,7 @@ namespace RestartVpn.Core.Settings
         public bool FollowRedirects { get; set; } = true;
         public int MaxRedirects { get; set; } = 5;
         public bool Tls12 { get; set; } = true;
-        public string UserAgent { get; set; } = "RestartVPN/0.1 (+https://github.com/restartvpn/restartvpn)";
+        public string UserAgent { get; set; } = "RestartVPN/0.1 (+https://github.com/meferspb/restartvpn)";
         public bool Treat5xxAsFailure { get; set; } = true;
         public int MaxBodyBytes { get; set; } = 65536;
 

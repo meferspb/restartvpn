@@ -7,7 +7,7 @@
 Если репозиторий уже создан на GitHub:
 
 ~~~powershell
-git remote add origin https://github.com/<owner>/restartvpn.git
+git remote add origin https://github.com/meferspb/restartvpn.git
 git push -u origin main
 git push origin v0.1.0
 ~~~
@@ -15,7 +15,7 @@ git push origin v0.1.0
 Если репозитория ещё нет и установлен GitHub CLI:
 
 ~~~powershell
-gh repo create restartvpn --public --source=. --remote=origin --push
+gh repo create meferspb/restartvpn --public --source=. --remote=origin --push
 ~~~
 
 ## Релиз

@@ -6,7 +6,7 @@ namespace RestartVpn.App
     public static class AppInfo
     {
         public const string Name = "RestartVPN";
-        public const string RepositoryUrl = "https://github.com/restartvpn/restartvpn";
+        public const string RepositoryUrl = "https://github.com/meferspb/restartvpn";
 
         public static string Version
         {

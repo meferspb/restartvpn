@@ -46,6 +46,8 @@ OpenVPN. Один установочный exe для Windows 7 SP1 / 10 / 11, �
 
 ## Установка
 
+Релизы: https://github.com/meferspb/restartvpn/releases
+
 1. Скачайте `RestartVPN.exe` из Releases.
 2. Запустите: exe сам предложит установку для текущего пользователя
    (`%LOCALAPPDATA%\Programs\RestartVPN`), ярлык в меню «Пуск» и, по желанию,
